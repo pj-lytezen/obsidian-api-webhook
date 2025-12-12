@@ -38,20 +38,32 @@ A C# .NET 10 webhook service that acts as a proxy to post messages to Obsidian v
    }
    ```
 
+2a. Configure Obsidian API URL in `ObsidianWebhook/ObsidianWebhook/appsettings.json`:
+   ```json
+   {
+     "Obsidian": {
+       "ApiUrl": "http://localhost:27123"
+     }
+   }
+   ```
+   **Note:** Change the URL to match your Obsidian Local REST API server address.
+
 3. Create the required database tables:
    ```sql
    -- Vault configuration table
    CREATE TABLE public."VaultConfig" (
-       "Name" VARCHAR PRIMARY KEY,
-       "ApiKey" VARCHAR NOT NULL
+       "Name" text COLLATE pg_catalog."default" NOT NULL,
+       "ApiKey" text COLLATE pg_catalog."default" NOT NULL,
+       CONSTRAINT "VaultConfig_pkey" PRIMARY KEY ("Name", "ApiKey")
    );
 
    -- Note queue table for audit/retry
    CREATE TABLE public."NoteQueue" (
-       "Id" SERIAL PRIMARY KEY,
-       "Vault" VARCHAR NOT NULL,
-       "Note" TEXT NOT NULL,
-       "CreatedAt" TIMESTAMP DEFAULT NOW()
+       "Vault" text COLLATE pg_catalog."default" NOT NULL,
+       "Note" text COLLATE pg_catalog."default" NOT NULL,
+       "CreatedAt" timestamp without time zone NOT NULL DEFAULT now(),
+       "Id" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),
+       CONSTRAINT "NoteQueue_pkey" PRIMARY KEY ("Id")
    );
    ```
 
@@ -162,7 +174,7 @@ CREATE TABLE public."VaultConfig" (
 
 -- Note queue for audit and retry
 CREATE TABLE public."NoteQueue" (
-    "Id" SERIAL PRIMARY KEY,       -- Auto-incrementing queue ID
+    "Id" INT PRIMARY KEY,       -- Auto-incrementing queue ID
     "Vault" VARCHAR NOT NULL,      -- Vault identifier
     "Note" TEXT NOT NULL,          -- Markdown note content
     "CreatedAt" TIMESTAMP DEFAULT NOW() -- Queue timestamp
@@ -174,7 +186,8 @@ CREATE TABLE public."NoteQueue" (
 1. Install the "Local REST API" plugin in Obsidian
 2. Enable the plugin and note the API key
 3. Configure the server (default: HTTP on port 27123)
-4. Add the API key to your VaultConfig table
+4. Update `appsettings.json` with the Obsidian server URL
+5. Add the API key to your VaultConfig table
 
 ## Architecture
 
@@ -224,9 +237,8 @@ docker run -p 8080:8080 obsidian-webhook
 
 ## Known Limitations
 
-- Obsidian URL is currently hardcoded to `http://mylocalserver:27123`
+- Single Obsidian URL configured globally (no per-vault URL support)
 - Only supports periodic note endpoints (not full Obsidian API)
-- Single Obsidian instance support (no multi-instance routing)
 - Flush endpoint sends all queued notes to daily periodic notes (doesn't preserve original period type)
 
 ## Future Enhancements

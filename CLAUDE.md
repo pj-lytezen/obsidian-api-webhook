@@ -47,9 +47,14 @@ Use the `ObsidianWebhook.http` file with Visual Studio HTTP client or REST Clien
 - HTTP client factory for Obsidian API calls
 - Minimal API endpoints for webhook operations
 
-**local.settings.json** - Local development configuration (gitignored):
+**local.settings.json** / **appsettings.Development.json** - Local development configuration (gitignored):
 - PostgreSQL connection string
 - **CRITICAL**: Contains credentials - never commit this file
+
+**appsettings.json** - Application configuration:
+- Obsidian API URL configuration
+- Logging settings
+- Allowed hosts
 
 ### Database Schema
 
@@ -109,7 +114,7 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
 2. Validate `{period}` is one of: daily, weekly, monthly, quarterly, yearly
 3. Query `VaultConfig` table using `{vault}` parameter to get `ApiKey`
 4. **Insert note into `NoteQueue` table** and capture returned `Id`
-5. Forward request to hardcoded Obsidian URL: `http://mylocalserver:27123/periodic/{period}/`
+5. Forward request to configured Obsidian URL from `appsettings.json`: `{Obsidian:ApiUrl}/periodic/{period}/`
 6. Authenticate using bearer token from database
 7. **On success: DELETE note from queue using captured `Id`**
 8. Return Obsidian API response to caller
@@ -135,7 +140,7 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
 
 - All API responses use structured JSON with `success`, `message`, and contextual fields
 - Database credentials are in `local.settings.json` (local dev) or connection strings configuration
-- **Obsidian URL is hardcoded** to `http://mylocalserver:27123` (lines 79, 205 in Program.cs)
+- **Obsidian API URL is configured** in `appsettings.json` under `Obsidian:ApiUrl` (default: `http://localhost:27123`)
 - The `vault` path parameter is used for database lookup to retrieve the API key
 - `.WithOpenApi()` has been removed due to .NET 10 deprecation (replaced by built-in OpenAPI generation)
 - Obsidian API may use self-signed certificates requiring certificate trust configuration
@@ -162,7 +167,7 @@ LIMIT 10;
 **Notes stuck in queue:**
 - Check if Obsidian Local REST API is running and accessible
 - Verify API key in VaultConfig matches Obsidian plugin settings
-- Verify hardcoded URL matches Obsidian server (line 79, 205 in Program.cs)
+- Verify `Obsidian:ApiUrl` in `appsettings.json` matches your Obsidian server URL
 - Call flush endpoint to retry delivery
 
 **Database connection issues:**
@@ -172,8 +177,8 @@ LIMIT 10;
 
 ## Known Issues & Future Improvements
 
-- Obsidian URL should be retrieved from database or configuration instead of being hardcoded
-- Consider adding column `"ObsidianUrl"` to VaultConfig table for multi-instance support
+- Consider adding column `"ObsidianUrl"` to VaultConfig table for per-vault URL support (multi-instance routing)
 - Flush endpoint should store period type in NoteQueue table to preserve original destination
 - Consider adding batch size limits for flush operations to prevent timeout on large queues
 - Add periodic background job to automatically retry failed deliveries
+- Add environment variable support for Obsidian:ApiUrl configuration

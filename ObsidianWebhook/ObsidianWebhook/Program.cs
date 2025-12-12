@@ -9,6 +9,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var obsidianApiUrl = builder.Configuration["Obsidian:ApiUrl"] ?? "http://localhost:27123";
 
 var app = builder.Build();
 
@@ -76,7 +77,6 @@ app.MapPost("/periodic/{vault}/{period}", async (
 
         // Query VaultConfig table to get API key for the specified vault name
         string? apiKey = null;
-        string? obsidianUrl = "http://mylocalserver:27123";
 
         using (var connection = new NpgsqlConnection(connectionString))
         {
@@ -135,7 +135,7 @@ app.MapPost("/periodic/{vault}/{period}", async (
 
         // Call Obsidian Local REST API
         var httpClient = httpClientFactory.CreateClient();
-        var obsidianEndpoint = $"{obsidianUrl}/periodic/{period}/";
+        var obsidianEndpoint = $"{obsidianApiUrl}/periodic/{period}/";
 
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, obsidianEndpoint);
         httpRequest.Headers.Add("Authorization", $"Bearer {apiKey}");
@@ -202,7 +202,6 @@ app.MapPost("/periodic/{vault}/flush", async (
     {
         // Query VaultConfig table to get API key for the specified vault
         string? apiKey = null;
-        string? obsidianUrl = "http://mylocalserver:27123";
 
         using (var connection = new NpgsqlConnection(connectionString))
         {
@@ -272,7 +271,7 @@ app.MapPost("/periodic/{vault}/flush", async (
             try
             {
                 // Default to daily periodic note for flush
-                var obsidianEndpoint = $"{obsidianUrl}/periodic/daily/";
+                var obsidianEndpoint = $"{obsidianApiUrl}/periodic/daily/";
 
                 var httpRequest = new HttpRequestMessage(HttpMethod.Post, obsidianEndpoint);
                 httpRequest.Headers.Add("Authorization", $"Bearer {apiKey}");
