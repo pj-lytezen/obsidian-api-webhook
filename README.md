@@ -35,11 +35,20 @@ A C# .NET 10 webhook service that acts as a proxy to post messages to Obsidian v
    }
    ```
 
-3. Create the VaultConfig table:
+3. Create the required database tables:
    ```sql
+   -- Vault configuration table
    CREATE TABLE public."VaultConfig" (
        "Name" VARCHAR PRIMARY KEY,
        "ApiKey" VARCHAR NOT NULL
+   );
+
+   -- Note queue table for audit/retry
+   CREATE TABLE public."NoteQueue" (
+       "Id" SERIAL PRIMARY KEY,
+       "Vault" VARCHAR NOT NULL,
+       "Note" TEXT NOT NULL,
+       "CreatedAt" TIMESTAMP DEFAULT NOW()
    );
    ```
 
@@ -98,9 +107,18 @@ Returns PostgreSQL connection status and version information.
 ### Database Schema
 
 ```sql
+-- Vault configuration
 CREATE TABLE public."VaultConfig" (
     "Name" VARCHAR PRIMARY KEY,    -- Vault identifier
     "ApiKey" VARCHAR NOT NULL      -- Obsidian Local REST API token
+);
+
+-- Note queue for audit and retry
+CREATE TABLE public."NoteQueue" (
+    "Id" SERIAL PRIMARY KEY,       -- Auto-incrementing queue ID
+    "Vault" VARCHAR NOT NULL,      -- Vault identifier
+    "Note" TEXT NOT NULL,          -- Markdown note content
+    "CreatedAt" TIMESTAMP DEFAULT NOW() -- Queue timestamp
 );
 ```
 
@@ -120,6 +138,10 @@ Webhook Service (this app)
     ↓ Query VaultConfig for API key
 PostgreSQL Database
     ↓ Return API key
+Webhook Service
+    ↓ INSERT into NoteQueue
+PostgreSQL Database (NoteQueue)
+    ↓ Note queued
 Webhook Service
     ↓ POST /periodic/{period}/ with Bearer auth
 Obsidian Local REST API

@@ -61,6 +61,16 @@ CREATE TABLE public."VaultConfig" (
 );
 ```
 
+**NoteQueue Table** (PostgreSQL):
+```sql
+CREATE TABLE public."NoteQueue" (
+    "Id" SERIAL PRIMARY KEY,          -- Auto-incrementing queue ID
+    "Vault" VARCHAR NOT NULL,         -- Vault identifier
+    "Note" TEXT NOT NULL,             -- Markdown note content
+    "CreatedAt" TIMESTAMP DEFAULT NOW() -- Queue timestamp
+);
+```
+
 **Important PostgreSQL Syntax Notes:**
 - Use double quotes (`"`) for identifiers (table/column names) when case-sensitive
 - Use single quotes (`'`) for string literal values
@@ -90,9 +100,10 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
 1. Request comes to `/periodic/{vault}/{period}` with markdown body
 2. Validate `{period}` is one of: daily, weekly, monthly, quarterly, yearly
 3. Query `VaultConfig` table using `{vault}` parameter to get `ApiKey`
-4. Forward request to hardcoded Obsidian URL: `http://mylocalserver:27123/periodic/{period}/`
-5. Authenticate using bearer token from database
-6. Return Obsidian API response to caller
+4. **Insert note into `NoteQueue` table** for audit/retry purposes
+5. Forward request to hardcoded Obsidian URL: `http://mylocalserver:27123/periodic/{period}/`
+6. Authenticate using bearer token from database
+7. Return Obsidian API response to caller
 
 ### Dependencies
 

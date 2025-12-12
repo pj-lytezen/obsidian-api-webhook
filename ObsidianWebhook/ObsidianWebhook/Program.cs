@@ -117,6 +117,20 @@ app.MapPost("/periodic/{vault}/{period}", async (
             });
         }
 
+        // Insert note into queue database
+        using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+
+            var insertQuery = @"INSERT INTO public.""NoteQueue""(""Vault"", ""Note"")
+                                VALUES (@vault, @note);";
+            using var command = new NpgsqlCommand(insertQuery, connection);
+            command.Parameters.AddWithValue("@vault", vault);
+            command.Parameters.AddWithValue("@note", content);
+
+            await command.ExecuteNonQueryAsync();
+        }
+
         // Call Obsidian Local REST API
         var httpClient = httpClientFactory.CreateClient();
         var obsidianEndpoint = $"{obsidianUrl}/periodic/{period}/";
