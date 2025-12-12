@@ -5,10 +5,13 @@ A C# .NET 10 webhook service that acts as a proxy to post messages to Obsidian v
 ## Features
 
 - **Periodic Notes Integration** - Append content to daily, weekly, monthly, quarterly, or yearly notes
+- **Queue-Based Delivery** - All notes queued in database before delivery with automatic cleanup on success
+- **Batch Flush Endpoint** - Process all queued notes for a vault with detailed success/failure reporting
 - **Database-Driven Configuration** - Store API keys and vault configurations in PostgreSQL
 - **RESTful Webhook API** - Simple HTTP POST interface for external integrations
 - **Docker Support** - Containerized deployment with multi-stage builds
 - **OpenAPI Documentation** - Built-in Swagger/OpenAPI support for API exploration
+- **Audit Trail** - All incoming notes logged with timestamp for debugging and retry scenarios
 
 ## Quick Start
 
@@ -128,6 +131,23 @@ curl -X POST "http://localhost:5135/periodic/MyVault/flush"
 **Endpoint:** `GET /db-test`
 
 Returns PostgreSQL connection status and version information.
+
+## Use Cases
+
+### Real-time Note Delivery
+Use `POST /periodic/{vault}/{period}` for immediate delivery of notes to Obsidian. Notes are queued first for audit purposes, then delivered, and cleaned up on success.
+
+### Retry Failed Deliveries
+If Obsidian API is temporarily unavailable or network issues occur, failed notes remain in the queue. Use `POST /periodic/{vault}/flush` to retry all queued notes for a vault.
+
+### Scheduled Batch Processing
+Set up a scheduled task (cron, systemd timer, etc.) to periodically call the flush endpoint to process any accumulated notes.
+
+### Manual Queue Management
+Query the `NoteQueue` table directly to inspect queued notes:
+```sql
+SELECT * FROM public."NoteQueue" WHERE "Vault" = 'MyVault' ORDER BY "CreatedAt" DESC;
+```
 
 ## Configuration
 

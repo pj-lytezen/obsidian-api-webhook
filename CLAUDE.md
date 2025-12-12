@@ -104,13 +104,26 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
 
 ### Configuration Flow
 
+**Regular POST /periodic/{vault}/{period}:**
 1. Request comes to `/periodic/{vault}/{period}` with markdown body
 2. Validate `{period}` is one of: daily, weekly, monthly, quarterly, yearly
 3. Query `VaultConfig` table using `{vault}` parameter to get `ApiKey`
-4. **Insert note into `NoteQueue` table** for audit/retry purposes
+4. **Insert note into `NoteQueue` table** and capture returned `Id`
 5. Forward request to hardcoded Obsidian URL: `http://mylocalserver:27123/periodic/{period}/`
 6. Authenticate using bearer token from database
-7. Return Obsidian API response to caller
+7. **On success: DELETE note from queue using captured `Id`**
+8. Return Obsidian API response to caller
+
+**Flush POST /periodic/{vault}/flush:**
+1. Query `VaultConfig` table to get `ApiKey` for vault
+2. SELECT all queued notes for vault (ordered by CreatedAt ASC)
+3. If queue is empty, return success with zero counts
+4. Loop through each note:
+   - POST to `/periodic/daily/` with bearer auth
+   - Track success/failure with note ID
+   - Add successful IDs to deletion list
+5. Bulk DELETE successfully processed notes using `ANY(@ids)` array
+6. Return summary with totalNotes, successCount, failureCount, errors
 
 ### Dependencies
 
@@ -129,9 +142,38 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
 - Error responses include stack traces for debugging purposes
 - **Flush endpoint defaults to daily periodic notes** - all queued notes are sent to `/periodic/daily/`
 
+## Troubleshooting
+
+### Check Queue Status
+```sql
+-- Count queued notes by vault
+SELECT "Vault", COUNT(*) as "QueuedNotes"
+FROM public."NoteQueue"
+GROUP BY "Vault";
+
+-- View oldest queued notes
+SELECT * FROM public."NoteQueue"
+ORDER BY "CreatedAt" ASC
+LIMIT 10;
+```
+
+### Common Scenarios
+
+**Notes stuck in queue:**
+- Check if Obsidian Local REST API is running and accessible
+- Verify API key in VaultConfig matches Obsidian plugin settings
+- Verify hardcoded URL matches Obsidian server (line 79, 205 in Program.cs)
+- Call flush endpoint to retry delivery
+
+**Database connection issues:**
+- Use `/db-test` endpoint to verify connection
+- Check connection string in `local.settings.json` or `appsettings.Development.json`
+- Verify PostgreSQL server is running and accepting connections
+
 ## Known Issues & Future Improvements
 
 - Obsidian URL should be retrieved from database or configuration instead of being hardcoded
 - Consider adding column `"ObsidianUrl"` to VaultConfig table for multi-instance support
 - Flush endpoint should store period type in NoteQueue table to preserve original destination
 - Consider adding batch size limits for flush operations to prevent timeout on large queues
+- Add periodic background job to automatically retry failed deliveries
