@@ -82,7 +82,14 @@ CREATE TABLE public."NoteQueue" (
 - `vault`: Vault name to lookup in VaultConfig table
 - `period`: daily, weekly, monthly, quarterly, or yearly
 - Body: Markdown content (text/markdown)
-- Queries database for API key → Calls hardcoded Obsidian API → Returns result
+- Queries database for API key → Queues note → Calls Obsidian API → Deletes from queue on success
+
+**POST /periodic/{vault}/flush**
+- `vault`: Vault name to flush queued notes for
+- Processes all queued notes for the specified vault
+- Sends each note to daily periodic note endpoint
+- Deletes successfully delivered notes from queue
+- Returns summary with totalNotes, successCount, failureCount, and errors
 
 **GET /db-test**
 - Database connection diagnostic endpoint
@@ -115,13 +122,16 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
 
 - All API responses use structured JSON with `success`, `message`, and contextual fields
 - Database credentials are in `local.settings.json` (local dev) or connection strings configuration
-- **Obsidian URL is hardcoded** to `http://mylocalserver:27123` (line 79 in Program.cs)
+- **Obsidian URL is hardcoded** to `http://mylocalserver:27123` (lines 79, 205 in Program.cs)
 - The `vault` path parameter is used for database lookup to retrieve the API key
 - `.WithOpenApi()` has been removed due to .NET 10 deprecation (replaced by built-in OpenAPI generation)
 - Obsidian API may use self-signed certificates requiring certificate trust configuration
 - Error responses include stack traces for debugging purposes
+- **Flush endpoint defaults to daily periodic notes** - all queued notes are sent to `/periodic/daily/`
 
 ## Known Issues & Future Improvements
 
 - Obsidian URL should be retrieved from database or configuration instead of being hardcoded
 - Consider adding column `"ObsidianUrl"` to VaultConfig table for multi-instance support
+- Flush endpoint should store period type in NoteQueue table to preserve original destination
+- Consider adding batch size limits for flush operations to prevent timeout on large queues

@@ -96,6 +96,33 @@ curl -X POST "http://localhost:5135/periodic/MyVault/daily" \
 }
 ```
 
+### Flush Queued Notes
+
+**Endpoint:** `POST /periodic/{vault}/flush`
+
+**Parameters:**
+- `vault` - Vault name from VaultConfig table
+
+**Description:** Processes all queued notes for the specified vault and sends them to Obsidian's daily periodic note.
+
+**Example:**
+```bash
+curl -X POST "http://localhost:5135/periodic/MyVault/flush"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Processed 5 queued notes for vault 'MyVault'",
+  "vault": "MyVault",
+  "totalNotes": 5,
+  "successCount": 5,
+  "failureCount": 0,
+  "errors": null
+}
+```
+
 ### Test Database Connection
 
 **Endpoint:** `GET /db-test`
@@ -180,14 +207,17 @@ docker run -p 8080:8080 obsidian-webhook
 - Obsidian URL is currently hardcoded to `http://mylocalserver:27123`
 - Only supports periodic note endpoints (not full Obsidian API)
 - Single Obsidian instance support (no multi-instance routing)
+- Flush endpoint sends all queued notes to daily periodic notes (doesn't preserve original period type)
 
 ## Future Enhancements
 
 - [ ] Add `ObsidianUrl` column to VaultConfig for multi-instance support
+- [ ] Add `Period` column to NoteQueue to preserve original destination period
 - [ ] Support additional Obsidian API endpoints (vault files, search, etc.)
 - [ ] Add authentication/authorization for webhook endpoints
 - [ ] Implement request logging and monitoring
 - [ ] Add retry logic for failed Obsidian API calls
+- [ ] Add batch size limits for flush operations to prevent timeouts
 
 ## License
 
