@@ -117,18 +117,20 @@ app.MapPost("/periodic/{vault}/{period}", async (
             });
         }
 
-        // Insert note into queue database
+        // Insert note into queue database and get the generated Id
+        int noteQueueId;
         using (var connection = new NpgsqlConnection(connectionString))
         {
             await connection.OpenAsync();
 
             var insertQuery = @"INSERT INTO public.""NoteQueue""(""Vault"", ""Note"")
-                                VALUES (@vault, @note);";
+                                VALUES (@vault, @note)
+                                RETURNING ""Id"";";
             using var command = new NpgsqlCommand(insertQuery, connection);
             command.Parameters.AddWithValue("@vault", vault);
             command.Parameters.AddWithValue("@note", content);
 
-            await command.ExecuteNonQueryAsync();
+            noteQueueId = (int)(await command.ExecuteScalarAsync() ?? 0);
         }
 
         // Call Obsidian Local REST API
@@ -143,6 +145,18 @@ app.MapPost("/periodic/{vault}/{period}", async (
 
         if (response.IsSuccessStatusCode)
         {
+            // Remove note from queue database
+            using (var connection = new NpgsqlConnection(connectionString))
+            {
+                await connection.OpenAsync();
+
+                var deleteQuery = @"DELETE FROM public.""NoteQueue"" WHERE ""Id"" = @id;";
+                using var command = new NpgsqlCommand(deleteQuery, connection);
+                command.Parameters.AddWithValue("@id", noteQueueId);
+
+                await command.ExecuteNonQueryAsync();
+            }
+
             return Results.Ok(new
             {
                 success = true,
