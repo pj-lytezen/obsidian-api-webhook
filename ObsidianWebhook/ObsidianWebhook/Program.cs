@@ -10,6 +10,12 @@ builder.Services.AddHttpClient();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var obsidianApiUrl = builder.Configuration["Obsidian:ApiUrl"] ?? "http://localhost:27123";
+var apiBearerToken = builder.Configuration["Api:BearerToken"];
+
+if (string.IsNullOrWhiteSpace(apiBearerToken))
+{
+    throw new InvalidOperationException("Api:BearerToken configuration is required. Set it in appsettings.json or via environment variable API__BEARERTOKEN");
+}
 
 // Register DataStore service
 builder.Services.AddSingleton(new DataStore(connectionString!));
@@ -23,6 +29,32 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Bearer token authorization middleware
+app.Use(async (context, next) =>
+{
+    var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+
+    if (authHeader == null || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = 401;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync("{\"success\":false,\"message\":\"Missing or invalid Authorization header. Provide 'Bearer <token>'\"}");
+        return;
+    }
+
+    var token = authHeader.Substring("Bearer ".Length).Trim();
+
+    if (token != apiBearerToken)
+    {
+        context.Response.StatusCode = 401;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync("{\"success\":false,\"message\":\"Invalid bearer token\"}");
+        return;
+    }
+
+    await next();
+});
 
 // Database connection test endpoint
 app.MapGet("/db-test", async (DataStore dataStore) =>

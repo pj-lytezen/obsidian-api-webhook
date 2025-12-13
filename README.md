@@ -38,15 +38,21 @@ A C# .NET 10 webhook service that acts as a proxy to post messages to Obsidian v
    }
    ```
 
-2a. Configure Obsidian API URL in `ObsidianWebhook/ObsidianWebhook/appsettings.json`:
+2a. Configure API settings in `ObsidianWebhook/ObsidianWebhook/appsettings.json`:
    ```json
    {
+     "Api": {
+       "BearerToken": "your-secure-bearer-token-here"
+     },
      "Obsidian": {
        "ApiUrl": "http://localhost:27123"
      }
    }
    ```
-   **Note:** Change the URL to match your Obsidian Local REST API server address.
+   **Important:**
+   - Generate a secure random token for `BearerToken` - this will be required for all API requests
+   - Change `ApiUrl` to match your Obsidian Local REST API server address
+   - For Docker deployments, use environment variable `API__BEARERTOKEN` instead of storing in config file
 
 3. Create the required database tables:
    ```sql
@@ -89,11 +95,16 @@ A C# .NET 10 webhook service that acts as a proxy to post messages to Obsidian v
 - `vault` - Vault name from VaultConfig table
 - `period` - One of: `daily`, `weekly`, `monthly`, `quarterly`, `yearly`
 
+**Headers:**
+- `Authorization: Bearer <your-api-token>` - Required for authentication
+- `Content-Type: text/markdown` - Request body content type
+
 **Request Body:** Markdown content (text/markdown)
 
 **Example:**
 ```bash
 curl -X POST "http://localhost:5135/periodic/MyVault/daily" \
+  -H "Authorization: Bearer your-secure-bearer-token-here" \
   -H "Content-Type: text/markdown" \
   -d "## Meeting Notes
 - Discussed project timeline
@@ -118,11 +129,15 @@ curl -X POST "http://localhost:5135/periodic/MyVault/daily" \
 **Parameters:**
 - `vault` - Vault name from VaultConfig table
 
+**Headers:**
+- `Authorization: Bearer <your-api-token>` - Required for authentication
+
 **Description:** Processes all queued notes for the specified vault and sends them to Obsidian's daily periodic note.
 
 **Example:**
 ```bash
-curl -X POST "http://localhost:5135/periodic/MyVault/flush"
+curl -X POST "http://localhost:5135/periodic/MyVault/flush" \
+  -H "Authorization: Bearer your-secure-bearer-token-here"
 ```
 
 **Response:**
@@ -142,7 +157,16 @@ curl -X POST "http://localhost:5135/periodic/MyVault/flush"
 
 **Endpoint:** `GET /db-test`
 
-Returns PostgreSQL connection status and version information.
+**Headers:**
+- `Authorization: Bearer <your-api-token>` - Required for authentication
+
+**Description:** Returns PostgreSQL connection status and version information.
+
+**Example:**
+```bash
+curl -X GET "http://localhost:5135/db-test" \
+  -H "Authorization: Bearer your-secure-bearer-token-here"
+```
 
 ## Use Cases
 
@@ -160,6 +184,31 @@ Query the `NoteQueue` table directly to inspect queued notes:
 ```sql
 SELECT * FROM public."NoteQueue" WHERE "Vault" = 'MyVault' ORDER BY "CreatedAt" DESC;
 ```
+
+## Authentication
+
+All API endpoints require bearer token authentication. Include the token in the `Authorization` header of every request:
+
+```
+Authorization: Bearer your-secure-bearer-token-here
+```
+
+**Generating a Secure Token:**
+```bash
+# Using OpenSSL (Linux/Mac)
+openssl rand -base64 32
+
+# Using PowerShell (Windows)
+[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+
+# Using Python
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+**Configuration:**
+- Set in `appsettings.json` under `Api:BearerToken`
+- Override via environment variable: `API__BEARERTOKEN`
+- The token is validated on every request; unauthorized requests receive HTTP 401
 
 ## Configuration
 
@@ -233,8 +282,20 @@ dotnet watch run
 ```bash
 cd ObsidianWebhook
 docker build -t obsidian-webhook -f ObsidianWebhook/Dockerfile .
-docker run -p 5135:5135 obsidian-webhook
+
+# Run with environment variables
+docker run -d --name obsidian-webhook \
+  -p 5135:5135 \
+  -e 'ConnectionStrings__DefaultConnection=Host=<db-host>;Port=5432;Database=YourDB;Username=user;Password=pass' \
+  -e 'API__BEARERTOKEN=your-secure-token-here' \
+  -e 'Obsidian__ApiUrl=http://<obsidian-host>:27123' \
+  obsidian-webhook
 ```
+
+**Environment Variables:**
+- `ConnectionStrings__DefaultConnection` - PostgreSQL connection string
+- `API__BEARERTOKEN` - Bearer token for API authentication (required)
+- `Obsidian__ApiUrl` - Obsidian Local REST API URL
 
 **Port Mapping:**
 - `5135` - HTTP

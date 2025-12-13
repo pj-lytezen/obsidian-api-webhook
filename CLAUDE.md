@@ -42,6 +42,7 @@ docker push <registry-host>:5000/obsidian-webhook:1.0.1
 # Run Docker container locally (HTTP only)
 docker run -p 5135:5135 \
   -e 'ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=YourDB;Username=user;Password=pass' \
+  -e 'API__BEARERTOKEN=your-secure-token-here' \
   -e 'Obsidian__ApiUrl=http://localhost:27123' \
   obsidian-webhook
 
@@ -49,6 +50,7 @@ docker run -p 5135:5135 \
 docker run -d --name obsidian-webhook \
   -p 5135:5135 \
   -e 'ConnectionStrings__DefaultConnection=Host=<db-host>;Port=5432;Database=YourDB;Username=user;Password=pass' \
+  -e 'API__BEARERTOKEN=your-secure-token-here' \
   -e 'Obsidian__ApiUrl=http://<obsidian-host>:27123' \
   <registry-host>:5000/obsidian-webhook:1.0.1
 ```
@@ -57,6 +59,8 @@ docker run -d --name obsidian-webhook \
 - Container is configured for HTTP only (port 5135). For HTTPS in production, use a reverse proxy like nginx or Traefik.
 - Use environment variables to override `appsettings.json` configuration
 - Connection strings use double underscore (`__`) syntax for nested configuration
+- **REQUIRED:** `API__BEARERTOKEN` must be set - application will fail to start without it
+- Generate secure tokens using: `openssl rand -base64 32` or `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 - Current production version: 1.0.1
 
 ### Testing Endpoints
@@ -69,6 +73,7 @@ Use the `ObsidianWebhook.http` file with Visual Studio HTTP client or REST Clien
 **Program.cs** - Application entry point using minimal APIs:
 - Service registration and configuration
 - HTTP client factory for Obsidian API calls
+- Bearer token authentication middleware (validates all requests)
 - Minimal API endpoint definitions
 - No direct database operations (delegated to DataStore)
 
@@ -83,6 +88,7 @@ Use the `ObsidianWebhook.http` file with Visual Studio HTTP client or REST Clien
 - **CRITICAL**: Contains credentials - never commit this file
 
 **appsettings.json** - Application configuration:
+- Bearer token for API authentication (Api:BearerToken)
 - Obsidian API URL configuration
 - Logging settings
 - Allowed hosts
@@ -111,6 +117,29 @@ CREATE TABLE public."NoteQueue" (
 - Use double quotes (`"`) for identifiers (table/column names) when case-sensitive
 - Use single quotes (`'`) for string literal values
 - Column reference: `"VaultConfig"."Name"` not `"VaultConfig.Name"`
+
+### Authentication
+
+**Bearer Token Middleware:**
+All API endpoints require bearer token authentication via the `Authorization` header:
+```
+Authorization: Bearer <token-from-config>
+```
+
+- Token is configured via `Api:BearerToken` in appsettings.json or `API__BEARERTOKEN` environment variable
+- Middleware executes before all endpoints and returns HTTP 401 if:
+  - Authorization header is missing
+  - Authorization header doesn't start with "Bearer "
+  - Token doesn't match the configured value
+- Application startup fails if bearer token is not configured (required configuration)
+
+**Response for unauthorized requests:**
+```json
+{
+  "success": false,
+  "message": "Missing or invalid Authorization header. Provide 'Bearer <token>'"
+}
+```
 
 ### API Endpoints
 
@@ -238,6 +267,13 @@ LIMIT 10;
 - Use IP addresses instead of hostnames in `Obsidian__ApiUrl` environment variable
 - For Windows hosts file mappings, note they don't apply inside Docker containers
 - Test DNS resolution from container: `docker exec <container-id> nslookup <hostname>`
+
+**HTTP 401 Unauthorized:**
+- Missing or invalid bearer token in Authorization header
+- Verify `API__BEARERTOKEN` environment variable matches token used in requests
+- Check Authorization header format: `Authorization: Bearer <token>` (case-insensitive "Bearer")
+- For Docker, inspect environment: `docker exec <container-id> printenv | grep API__BEARERTOKEN`
+- Application logs will show "Missing or invalid Authorization header" or "Invalid bearer token"
 
 ## Known Issues & Future Improvements
 
