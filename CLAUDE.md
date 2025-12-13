@@ -42,10 +42,17 @@ Use the `ObsidianWebhook.http` file with Visual Studio HTTP client or REST Clien
 
 ### Key Components
 
-**Program.cs** - Entire application logic using minimal APIs:
-- Database connection configuration via connection strings
+**Program.cs** - Application entry point using minimal APIs:
+- Service registration and configuration
 - HTTP client factory for Obsidian API calls
-- Minimal API endpoints for webhook operations
+- Minimal API endpoint definitions
+- No direct database operations (delegated to DataStore)
+
+**DataStore.cs** - Database access service class:
+- Handles all PostgreSQL database operations
+- Methods for vault configuration, note queue management
+- Registered as singleton service
+- Encapsulates all Npgsql/database logic
 
 **local.settings.json** / **appsettings.Development.json** - Local development configuration (gitignored):
 - PostgreSQL connection string
@@ -129,6 +136,19 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
    - Add successful IDs to deletion list
 5. Bulk DELETE successfully processed notes using `ANY(@ids)` array
 6. Return summary with totalNotes, successCount, failureCount, errors
+
+### DataStore Service Methods
+
+The `DataStore` class provides the following async methods:
+
+- `GetVaultApiKeyAsync(string vaultName)` - Retrieves API key for a vault
+- `InsertNoteToQueueAsync(string vault, string note)` - Inserts note and returns generated Id
+- `DeleteNoteFromQueueAsync(int noteId)` - Deletes a single note by Id
+- `GetQueuedNotesForVaultAsync(string vault)` - Gets all queued notes (ordered by CreatedAt)
+- `DeleteMultipleNotesFromQueueAsync(int[] noteIds)` - Bulk delete using PostgreSQL ANY operator
+- `TestDatabaseConnectionAsync()` - Tests connection and returns version info
+
+All database operations are isolated in this service for maintainability and testability.
 
 ### Dependencies
 

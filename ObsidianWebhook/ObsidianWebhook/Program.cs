@@ -1,5 +1,5 @@
-using Npgsql;
 using System.Text;
+using ObsidianWebhook;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +10,9 @@ builder.Services.AddHttpClient();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var obsidianApiUrl = builder.Configuration["Obsidian:ApiUrl"] ?? "http://localhost:27123";
+
+// Register DataStore service
+builder.Services.AddSingleton(new DataStore(connectionString!));
 
 var app = builder.Build();
 
@@ -22,36 +25,16 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Database connection test endpoint
-app.MapGet("/db-test", async () =>
+app.MapGet("/db-test", async (DataStore dataStore) =>
 {
-    try
+    var (success, message, data) = await dataStore.TestDatabaseConnectionAsync();
+
+    return Results.Ok(new
     {
-        using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        
-        using var command = new NpgsqlCommand("SELECT version()", connection);
-        var version = await command.ExecuteScalarAsync();
-        
-        return Results.Ok(new 
-        { 
-            success = true, 
-            message = "Database connection successful!", 
-            postgresVersion = version?.ToString(),
-            database = connection.Database,
-            host = connection.Host,
-            port = connection.Port
-        });
-    }
-    catch (Exception ex)
-    {
-        return Results.Ok(new 
-        { 
-            success = false, 
-            message = "Database connection failed", 
-            error = ex.Message,
-            stackTrace = ex.StackTrace
-        });
-    }
+        success = success,
+        message = message,
+        data = data
+    });
 })
 .WithName("TestDatabaseConnection");
 
@@ -60,6 +43,7 @@ app.MapPost("/periodic/{vault}/{period}", async (
     string vault,
     string period,
     HttpRequest request,
+    DataStore dataStore,
     IHttpClientFactory httpClientFactory) =>
 {
     try
@@ -76,29 +60,14 @@ app.MapPost("/periodic/{vault}/{period}", async (
         }
 
         // Query VaultConfig table to get API key for the specified vault name
-        string? apiKey = null;
-
-        using (var connection = new NpgsqlConnection(connectionString))
+        var apiKey = await dataStore.GetVaultApiKeyAsync(vault);
+        if (apiKey == null)
         {
-            await connection.OpenAsync();
-
-            var query = "SELECT \"ApiKey\" FROM public.\"VaultConfig\" WHERE public.\"VaultConfig\".\"Name\" = @name;";
-            using var command = new NpgsqlCommand(query, connection);
-            command.Parameters.AddWithValue("@name", vault);
-
-            using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
+            return Results.NotFound(new
             {
-                apiKey = reader.GetString(0);
-            }
-            else
-            {
-                return Results.NotFound(new
-                {
-                    success = false,
-                    message = $"Vault configuration '{vault}' not found in database"
-                });
-            }
+                success = false,
+                message = $"Vault configuration '{vault}' not found in database"
+            });
         }
 
         // Read the request body (markdown content)
@@ -118,20 +87,7 @@ app.MapPost("/periodic/{vault}/{period}", async (
         }
 
         // Insert note into queue database and get the generated Id
-        int noteQueueId;
-        using (var connection = new NpgsqlConnection(connectionString))
-        {
-            await connection.OpenAsync();
-
-            var insertQuery = @"INSERT INTO public.""NoteQueue""(""Vault"", ""Note"")
-                                VALUES (@vault, @note)
-                                RETURNING ""Id"";";
-            using var command = new NpgsqlCommand(insertQuery, connection);
-            command.Parameters.AddWithValue("@vault", vault);
-            command.Parameters.AddWithValue("@note", content);
-
-            noteQueueId = (int)(await command.ExecuteScalarAsync() ?? 0);
-        }
+        var noteQueueId = await dataStore.InsertNoteToQueueAsync(vault, content);
 
         // Call Obsidian Local REST API
         var httpClient = httpClientFactory.CreateClient();
@@ -146,16 +102,7 @@ app.MapPost("/periodic/{vault}/{period}", async (
         if (response.IsSuccessStatusCode)
         {
             // Remove note from queue database
-            using (var connection = new NpgsqlConnection(connectionString))
-            {
-                await connection.OpenAsync();
-
-                var deleteQuery = @"DELETE FROM public.""NoteQueue"" WHERE ""Id"" = @id;";
-                using var command = new NpgsqlCommand(deleteQuery, connection);
-                command.Parameters.AddWithValue("@id", noteQueueId);
-
-                await command.ExecuteNonQueryAsync();
-            }
+            await dataStore.DeleteNoteFromQueueAsync(noteQueueId);
 
             return Results.Ok(new
             {
@@ -196,55 +143,24 @@ app.MapPost("/periodic/{vault}/{period}", async (
 // Flush endpoint - Processes all queued notes for a vault
 app.MapPost("/periodic/{vault}/flush", async (
     string vault,
+    DataStore dataStore,
     IHttpClientFactory httpClientFactory) =>
 {
     try
     {
         // Query VaultConfig table to get API key for the specified vault
-        string? apiKey = null;
-
-        using (var connection = new NpgsqlConnection(connectionString))
+        var apiKey = await dataStore.GetVaultApiKeyAsync(vault);
+        if (apiKey == null)
         {
-            await connection.OpenAsync();
-
-            var query = "SELECT \"ApiKey\" FROM public.\"VaultConfig\" WHERE public.\"VaultConfig\".\"Name\" = @name;";
-            using var command = new NpgsqlCommand(query, connection);
-            command.Parameters.AddWithValue("@name", vault);
-
-            using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
+            return Results.NotFound(new
             {
-                apiKey = reader.GetString(0);
-            }
-            else
-            {
-                return Results.NotFound(new
-                {
-                    success = false,
-                    message = $"Vault configuration '{vault}' not found in database"
-                });
-            }
+                success = false,
+                message = $"Vault configuration '{vault}' not found in database"
+            });
         }
 
         // Get all queued notes for this vault
-        var queuedNotes = new List<(int Id, string Note)>();
-        using (var connection = new NpgsqlConnection(connectionString))
-        {
-            await connection.OpenAsync();
-
-            var selectQuery = @"SELECT ""Id"", ""Note""
-                               FROM public.""NoteQueue""
-                               WHERE ""Vault"" = @vault
-                               ORDER BY ""CreatedAt"" ASC;";
-            using var command = new NpgsqlCommand(selectQuery, connection);
-            command.Parameters.AddWithValue("@vault", vault);
-
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                queuedNotes.Add((reader.GetInt32(0), reader.GetString(1)));
-            }
-        }
+        var queuedNotes = await dataStore.GetQueuedNotesForVaultAsync(vault);
 
         if (queuedNotes.Count == 0)
         {
@@ -298,19 +214,7 @@ app.MapPost("/periodic/{vault}/flush", async (
         }
 
         // Delete successfully processed notes from queue
-        if (processedIds.Count > 0)
-        {
-            using (var connection = new NpgsqlConnection(connectionString))
-            {
-                await connection.OpenAsync();
-
-                var deleteQuery = @"DELETE FROM public.""NoteQueue"" WHERE ""Id"" = ANY(@ids);";
-                using var command = new NpgsqlCommand(deleteQuery, connection);
-                command.Parameters.AddWithValue("@ids", processedIds.ToArray());
-
-                await command.ExecuteNonQueryAsync();
-            }
-        }
+        await dataStore.DeleteMultipleNotesFromQueueAsync(processedIds.ToArray());
 
         return Results.Ok(new
         {

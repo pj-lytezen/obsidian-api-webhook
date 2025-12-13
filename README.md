@@ -234,6 +234,7 @@ docker run -p 8080:8080 obsidian-webhook
 - **ASP.NET Core Minimal APIs** - Lightweight HTTP API
 - **Npgsql 9.0.2** - PostgreSQL data provider
 - **Microsoft.AspNetCore.OpenApi** - API documentation
+- **Dependency Injection** - Service-based architecture with DataStore service class
 
 ## Known Limitations
 
