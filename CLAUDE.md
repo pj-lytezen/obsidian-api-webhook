@@ -34,10 +34,10 @@ cd ObsidianWebhook
 docker build -t obsidian-webhook -f ObsidianWebhook/Dockerfile .
 
 # Tag for registry deployment
-docker tag obsidian-webhook <registry-host>:5000/obsidian-webhook:1.0.1
+docker tag obsidian-webhook <registry-host>:5000/obsidian-webhook:1.0.2
 
 # Push to private registry
-docker push <registry-host>:5000/obsidian-webhook:1.0.1
+docker push <registry-host>:5000/obsidian-webhook:1.0.2
 
 # Run Docker container locally (HTTP only)
 docker run -p 5135:5135 \
@@ -52,7 +52,7 @@ docker run -d --name obsidian-webhook \
   -e 'ConnectionStrings__DefaultConnection=Host=<db-host>;Port=5432;Database=YourDB;Username=user;Password=pass' \
   -e 'API__BEARERTOKEN=your-secure-token-here' \
   -e 'Obsidian__ApiUrl=http://<obsidian-host>:27123' \
-  <registry-host>:5000/obsidian-webhook:1.0.1
+  <registry-host>:5000/obsidian-webhook:1.0.2
 ```
 
 **Important Docker Notes:**
@@ -61,7 +61,7 @@ docker run -d --name obsidian-webhook \
 - Connection strings use double underscore (`__`) syntax for nested configuration
 - **REQUIRED:** `API__BEARERTOKEN` must be set - application will fail to start without it
 - Generate secure tokens using: `openssl rand -base64 32` or `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-- Current production version: 1.0.1
+- Current production version: 1.0.2
 
 ### Testing Endpoints
 Use the `ObsidianWebhook.http` file with Visual Studio HTTP client or REST Client extension. Default host: `http://localhost:5135`
