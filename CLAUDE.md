@@ -32,7 +32,7 @@ dotnet watch run
 docker build -t obsidian-webhook -f ObsidianWebhook/Dockerfile .
 
 # Run Docker container
-docker run -p 8080:8080 -p 8081:8081 obsidian-webhook
+docker run -p 5135:5135 -p 5136:5136 obsidian-webhook
 ```
 
 ### Testing Endpoints
