@@ -9,6 +9,8 @@ A C# .NET 10 webhook service that acts as a proxy to post messages to Obsidian v
 - **Batch Flush Endpoint** - Process all queued notes for a vault with detailed success/failure reporting
 - **Database-Driven Configuration** - Store API keys and vault configurations in PostgreSQL
 - **RESTful Webhook API** - Simple HTTP POST interface for external integrations
+- **Bearer Token Authentication** - Secure API access with configurable bearer token
+- **Health Check Endpoint** - Unauthenticated endpoint for monitoring systems and load balancers
 - **Docker Support** - Containerized deployment with multi-stage builds
 - **OpenAPI Documentation** - Built-in Swagger/OpenAPI support for API exploration
 - **Audit Trail** - All incoming notes logged with timestamp for debugging and retry scenarios
@@ -153,19 +155,52 @@ curl -X POST "http://localhost:5135/periodic/MyVault/flush" \
 }
 ```
 
-### Test Database Connection
+### Health Check
 
-**Endpoint:** `GET /db-test`
+**Endpoint:** `GET /health`
 
-**Headers:**
-- `Authorization: Bearer <your-api-token>` - Required for authentication
-
-**Description:** Returns PostgreSQL connection status and version information.
+**Description:** Returns application health status including database connectivity. This endpoint does not require authentication and can be used by monitoring systems and load balancers.
 
 **Example:**
 ```bash
-curl -X GET "http://localhost:5135/db-test" \
-  -H "Authorization: Bearer your-secure-bearer-token-here"
+curl -X GET "http://localhost:5135/health"
+```
+
+**Response (Healthy):**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-15T10:30:00.000Z",
+  "checks": {
+    "database": {
+      "status": "healthy",
+      "message": "Database connection successful!",
+      "data": {
+        "postgresVersion": "PostgreSQL 17.6",
+        "database": "Teams",
+        "host": "192.168.0.137",
+        "port": 5432
+      }
+    }
+  }
+}
+```
+
+**Response (Unhealthy - HTTP 503):**
+```json
+{
+  "status": "unhealthy",
+  "timestamp": "2025-01-15T10:30:00.000Z",
+  "checks": {
+    "database": {
+      "status": "unhealthy",
+      "message": "Database connection failed",
+      "data": {
+        "error": "Connection refused"
+      }
+    }
+  }
+}
 ```
 
 ## Use Cases
@@ -187,11 +222,16 @@ SELECT * FROM public."NoteQueue" WHERE "Vault" = 'MyVault' ORDER BY "CreatedAt" 
 
 ## Authentication
 
-All API endpoints require bearer token authentication. Include the token in the `Authorization` header of every request:
+All API endpoints require bearer token authentication, except for the `/health` endpoint. Include the token in the `Authorization` header of every request:
 
 ```
 Authorization: Bearer your-secure-bearer-token-here
 ```
+
+**Endpoints:**
+- `/health` - **No authentication required** (for monitoring systems)
+- `/periodic/{vault}/{period}` - **Authentication required**
+- `/periodic/{vault}/flush` - **Authentication required**
 
 **Generating a Secure Token:**
 ```bash

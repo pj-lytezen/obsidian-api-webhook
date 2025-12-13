@@ -30,9 +30,40 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Health check endpoint (no authorization required)
+app.MapGet("/health", async (DataStore dataStore) =>
+{
+    var (dbSuccess, dbMessage, dbData) = await dataStore.TestDatabaseConnectionAsync();
+
+    var healthStatus = new
+    {
+        status = dbSuccess ? "healthy" : "unhealthy",
+        timestamp = DateTime.UtcNow,
+        checks = new
+        {
+            database = new
+            {
+                status = dbSuccess ? "healthy" : "unhealthy",
+                message = dbMessage,
+                data = dbData
+            }
+        }
+    };
+
+    return dbSuccess ? Results.Ok(healthStatus) : Results.Json(healthStatus, statusCode: 503);
+})
+.WithName("HealthCheck");
+
 // Bearer token authorization middleware
 app.Use(async (context, next) =>
 {
+    // Skip authorization for health check endpoint
+    if (context.Request.Path.StartsWithSegments("/health"))
+    {
+        await next();
+        return;
+    }
+
     var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
 
     if (authHeader == null || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
@@ -55,20 +86,6 @@ app.Use(async (context, next) =>
 
     await next();
 });
-
-// Database connection test endpoint
-app.MapGet("/db-test", async (DataStore dataStore) =>
-{
-    var (success, message, data) = await dataStore.TestDatabaseConnectionAsync();
-
-    return Results.Ok(new
-    {
-        success = success,
-        message = message,
-        data = data
-    });
-})
-.WithName("TestDatabaseConnection");
 
 // Periodic Notes endpoint - Posts content to Obsidian vault periodic notes
 app.MapPost("/periodic/{vault}/{period}", async (

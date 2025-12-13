@@ -132,6 +132,7 @@ Authorization: Bearer <token-from-config>
   - Authorization header doesn't start with "Bearer "
   - Token doesn't match the configured value
 - Application startup fails if bearer token is not configured (required configuration)
+- **Exception:** The `/health` endpoint bypasses authorization for monitoring system access
 
 **Response for unauthorized requests:**
 ```json
@@ -143,22 +144,26 @@ Authorization: Bearer <token-from-config>
 
 ### API Endpoints
 
-**POST /periodic/{vault}/{period}**
+**GET /health** (No Authorization Required)
+- Health check endpoint for monitoring and load balancers
+- Tests database connectivity using TestDatabaseConnectionAsync()
+- Returns HTTP 200 with "healthy" status if database is accessible
+- Returns HTTP 503 with "unhealthy" status if database connection fails
+- Response includes timestamp and detailed database check results
+- **IMPORTANT:** This endpoint bypasses bearer token authentication
+
+**POST /periodic/{vault}/{period}** (Authorization Required)
 - `vault`: Vault name to lookup in VaultConfig table
 - `period`: daily, weekly, monthly, quarterly, or yearly
 - Body: Markdown content (text/markdown)
 - Queries database for API key → Queues note → Calls Obsidian API → Deletes from queue on success
 
-**POST /periodic/{vault}/flush**
+**POST /periodic/{vault}/flush** (Authorization Required)
 - `vault`: Vault name to flush queued notes for
 - Processes all queued notes for the specified vault
 - Sends each note to daily periodic note endpoint
 - Deletes successfully delivered notes from queue
 - Returns summary with totalNotes, successCount, failureCount, and errors
-
-**GET /db-test**
-- Database connection diagnostic endpoint
-- Returns PostgreSQL version and connection details
 
 ### External API Integration
 
