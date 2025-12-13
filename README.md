@@ -225,12 +225,13 @@ dotnet watch run
 ```bash
 cd ObsidianWebhook
 docker build -t obsidian-webhook -f ObsidianWebhook/Dockerfile .
-docker run -p 5135:5135 -p 5136:5136 obsidian-webhook
+docker run -p 5135:5135 obsidian-webhook
 ```
 
 **Port Mapping:**
 - `5135` - HTTP
-- `5136` - HTTPS
+
+**Note:** The Docker container uses HTTP only. For HTTPS in production, use a reverse proxy (nginx, Traefik, etc.) in front of the container.
 
 ## Technologies
 

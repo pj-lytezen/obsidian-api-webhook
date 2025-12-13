@@ -31,9 +31,11 @@ dotnet watch run
 # Build Docker image (from ObsidianWebhook directory)
 docker build -t obsidian-webhook -f ObsidianWebhook/Dockerfile .
 
-# Run Docker container
-docker run -p 5135:5135 -p 5136:5136 obsidian-webhook
+# Run Docker container (HTTP only)
+docker run -p 5135:5135 obsidian-webhook
 ```
+
+**Note:** Docker container is configured for HTTP only (port 5135). For HTTPS in production, use a reverse proxy like nginx or Traefik.
 
 ### Testing Endpoints
 Use the `ObsidianWebhook.http` file with Visual Studio HTTP client or REST Client extension. Default host: `http://localhost:5135`
