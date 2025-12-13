@@ -27,15 +27,37 @@ dotnet watch run
 ```
 
 ### Docker
+
 ```bash
 # Build Docker image (from ObsidianWebhook directory)
+cd ObsidianWebhook
 docker build -t obsidian-webhook -f ObsidianWebhook/Dockerfile .
 
-# Run Docker container (HTTP only)
-docker run -p 5135:5135 obsidian-webhook
+# Tag for registry deployment
+docker tag obsidian-webhook <registry-host>:5000/obsidian-webhook:1.0.1
+
+# Push to private registry
+docker push <registry-host>:5000/obsidian-webhook:1.0.1
+
+# Run Docker container locally (HTTP only)
+docker run -p 5135:5135 \
+  -e 'ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=YourDB;Username=user;Password=pass' \
+  -e 'Obsidian__ApiUrl=http://localhost:27123' \
+  obsidian-webhook
+
+# Run from private registry with environment variables
+docker run -d --name obsidian-webhook \
+  -p 5135:5135 \
+  -e 'ConnectionStrings__DefaultConnection=Host=<db-host>;Port=5432;Database=YourDB;Username=user;Password=pass' \
+  -e 'Obsidian__ApiUrl=http://<obsidian-host>:27123' \
+  <registry-host>:5000/obsidian-webhook:1.0.1
 ```
 
-**Note:** Docker container is configured for HTTP only (port 5135). For HTTPS in production, use a reverse proxy like nginx or Traefik.
+**Important Docker Notes:**
+- Container is configured for HTTP only (port 5135). For HTTPS in production, use a reverse proxy like nginx or Traefik.
+- Use environment variables to override `appsettings.json` configuration
+- Connection strings use double underscore (`__`) syntax for nested configuration
+- Current production version: 1.0.1
 
 ### Testing Endpoints
 Use the `ObsidianWebhook.http` file with Visual Studio HTTP client or REST Client extension. Default host: `http://localhost:5135`
@@ -115,6 +137,13 @@ The service integrates with **Obsidian Local REST API** (spec in `obsidian-open-
 - Requires bearer token authentication (from database)
 - Supports periodic notes, vault files, active files, search, and commands
 - HTTPS typically on port 27124, HTTP on port 27123
+
+**CRITICAL NETWORK CONFIGURATION:**
+- Obsidian Local REST API plugin must bind to `0.0.0.0` (not `127.0.0.1`) to accept network connections
+- If bound to `127.0.0.1` (localhost only), Docker containers or remote services cannot connect
+- Verify binding address in Obsidian plugin settings before deploying to Docker
+- For Docker deployments, use the host machine's network IP address (e.g., `http://192.168.0.192:27123`)
+- Localhost/127.0.0.1 URLs will NOT work from inside Docker containers
 
 ### Configuration Flow
 
@@ -196,6 +225,19 @@ LIMIT 10;
 - Use `/db-test` endpoint to verify connection
 - Check connection string in `local.settings.json` or `appsettings.Development.json`
 - Verify PostgreSQL server is running and accepting connections
+
+**Connection Refused (192.168.x.x:27123):**
+- Most common cause: Obsidian Local REST API plugin bound to `127.0.0.1` instead of `0.0.0.0`
+- Fix: In Obsidian plugin settings, change binding address from `127.0.0.1` to `0.0.0.0`
+- Test connectivity from Docker host: `curl http://<obsidian-ip>:27123`
+- Verify firewall allows incoming connections on ports 27123/27124
+- Check container environment variable: `docker inspect <container-id> | grep Obsidian`
+
+**Name or Service Not Known (hostname:27123):**
+- Hostname is not resolvable from Docker container
+- Use IP addresses instead of hostnames in `Obsidian__ApiUrl` environment variable
+- For Windows hosts file mappings, note they don't apply inside Docker containers
+- Test DNS resolution from container: `docker exec <container-id> nslookup <hostname>`
 
 ## Known Issues & Future Improvements
 

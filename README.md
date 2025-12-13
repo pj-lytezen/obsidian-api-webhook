@@ -185,8 +185,16 @@ CREATE TABLE public."NoteQueue" (
 
 1. Install the "Local REST API" plugin in Obsidian
 2. Enable the plugin and note the API key
-3. Configure the server (default: HTTP on port 27123)
+3. Configure the server settings:
+   - **Binding Address:** Set to `0.0.0.0` (not `127.0.0.1`) to accept network connections
+   - **HTTP Port:** Default is 27123
+   - **HTTPS Port:** Default is 27124
+
+   **IMPORTANT:** If the plugin is bound to `127.0.0.1` (localhost only), the webhook service running in Docker or on another machine will not be able to connect. You must change the binding address to `0.0.0.0` to allow network access.
+
 4. Update `appsettings.json` with the Obsidian server URL
+   - For local deployment: `http://localhost:27123`
+   - For network deployment: `http://<obsidian-machine-ip>:27123`
 5. Add the API key to your VaultConfig table
 
 ## Architecture
